@@ -1,21 +1,37 @@
-# Sentiment Analysis Tool
+# Enhanced Sentiment Analysis Tool
 
-A simple and interactive sentiment analysis tool that uses NLTK's VADER (Valence Aware Dictionary and sEntiment Reasoner) to analyze the sentiment of text input.
+A comprehensive sentiment analysis tool that combines multiple approaches for accurate sentiment detection, including VADER, transformer models, and multilingual support.
 
 ## Features
 
-- Real-time sentiment analysis of user input
-- Provides detailed sentiment scores:
-  - Overall sentiment (Positive/Negative/Neutral)
-  - Compound score (-1 to 1)
-  - Positive, negative, and neutral component scores
-- Interactive command-line interface
-- Easy to use and understand
+- **Multiple Analysis Methods**:
+  - VADER sentiment analysis with custom lexicon
+  - DistilBERT transformer model
+  - Hybrid approach combining both methods
+  - Multilingual support (English, Spanish, French, German, Italian)
+
+- **Advanced Text Processing**:
+  - Contraction expansion
+  - Emoji handling
+  - Character normalization
+  - Spelling correction
+  - Punctuation removal
+  - Sarcasm detection
+
+- **Interactive Web Interface**:
+  - Real-time sentiment analysis
+  - Visual score representation
+  - Multiple language support
+  - Results export to CSV
 
 ## Requirements
 
 - Python 3.x
-- NLTK library
+- NLTK
+- Transformers (Hugging Face)
+- PyTorch
+- Streamlit
+- Other dependencies listed in requirements.txt
 
 ## Installation
 
@@ -25,39 +41,51 @@ A simple and interactive sentiment analysis tool that uses NLTK's VADER (Valence
 pip install -r requirements.txt
 ```
 
+3. Download required NLTK data:
+```python
+import nltk
+nltk.download('vader_lexicon')
+nltk.download('punkt')
+nltk.download('averaged_perceptron_tagger')
+```
+
 ## Usage
 
-1. Run the script:
+1. Run the Streamlit app:
 ```bash
-python sentiment_analysis.py
+streamlit run sentiment_analysis.py
 ```
 
-2. Enter your text when prompted
-3. View the sentiment analysis results
-4. Type 'quit' to exit the program
+2. Enter text in the text area
+3. Select language (if not English)
+4. Click "Analyze" to get results
+5. View detailed scores and visualizations
+6. Export results if needed
 
-## Example Output
+## Features in Detail
 
-```
-Enter text to analyze: I love this product! It's amazing!
+### Custom Lexicon
+The tool extends VADER's lexicon with modern slang and domain-specific terms to improve accuracy.
 
-Analysis Results:
-Text: I love this product! It's amazing!
-Sentiment: Positive
-Compound Score: 0.862
-Detailed Scores:
-  - Positive: 0.741
-  - Negative: 0.000
-  - Neutral: 0.259
-```
+### Text Preprocessing
+- Expands contractions (e.g., "don't" → "do not")
+- Converts emojis to text
+- Normalizes repeated characters
+- Corrects spelling errors
+- Removes irrelevant punctuation
 
-## How It Works
+### Sentiment Analysis
+- VADER scores (positive, negative, neutral, compound)
+- Transformer model scores
+- Combined sentiment score
+- Sarcasm detection
+- Multilingual support
 
-The tool uses NLTK's VADER sentiment analyzer, which is specifically attuned to sentiments expressed in social media. It provides:
-
-- Sentiment Classification: Positive, Negative, or Neutral
-- Compound Score: A normalized score between -1 (most negative) and +1 (most positive)
-- Detailed Scores: Individual scores for positive, negative, and neutral components
+### Visualization
+- Interactive bar charts showing:
+  - VADER scores
+  - Transformer scores
+  - Combined sentiment
 
 ## Project Structure
 
@@ -67,6 +95,14 @@ sentiment_analysis/
 ├── requirements.txt
 └── sentiment_analysis.py
 ```
+
+## Performance Considerations
+
+- The transformer model provides more accurate and contextual sentiment analysis
+- VADER is faster but less context-aware
+- The hybrid approach balances speed and accuracy
+- Sarcasm detection improves accuracy for ironic content
+- Multilingual support enables analysis in multiple languages
 
 ## License
 
