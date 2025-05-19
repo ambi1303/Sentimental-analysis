@@ -4,9 +4,33 @@ from nltk.sentiment import SentimentIntensityAnalyzer
 from textblob import TextBlob
 import numpy as np
 import re
+import emoji
+import contractions
+import pandas as pd
+from pathlib import Path
+import json
+from datetime import datetime
+from typing import List, Dict, Union, Optional
+import logging
+from datasets import load_dataset
+from sklearn.metrics import classification_report, confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
 
-class SentimentAnalyzer:
-    def __init__(self):
+class EnhancedSentimentAnalyzer:
+    def __init__(self, model_name: str = "distilbert-base-uncased-finetuned-sst-2-english"):
+        """Initialize the enhanced sentiment analyzer with multiple models."""
+        # Set up logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler('sentiment_analysis.log'),
+                logging.StreamHandler()
+            ]
+        )
+        self.logger = logging.getLogger(__name__)
+        
         # Initialize VADER
         self.vader = SentimentIntensityAnalyzer()
         self.load_custom_lexicon()
@@ -14,7 +38,7 @@ class SentimentAnalyzer:
         # Initialize transformer model
         self.transformer_model = None
         self.transformer_tokenizer = None
-        self.load_transformer_model()
+        self.load_transformer_model(model_name)
         
         # Initialize sarcasm detector
         self.sarcasm_detector = None
@@ -69,9 +93,13 @@ class SentimentAnalyzer:
                 (r'^right.*', 0.7)
             ]
         }
+        
+        # Create output directory
+        self.output_dir = Path('output')
+        self.output_dir.mkdir(exist_ok=True)
 
     def load_custom_lexicon(self):
-        """Load and extend VADER lexicon with custom terms"""
+        """Load and extend VADER lexicon with custom terms."""
         custom_lexicon = {
             'awesome': 2.0,
             'sucks': -2.0,
@@ -87,42 +115,74 @@ class SentimentAnalyzer:
             'ironic': -1.0,
             'yeah right': -1.5,
             'whatever': -1.0,
-            'absolutely': 0.0,  # Neutral for sarcasm detection
-            'totally': 0.0,     # Neutral for sarcasm detection
-            'of course': 0.0,   # Neutral for sarcasm detection
-            'relaxing': 1.0,    # Positive but often used sarcastically
-            'wonderful': 1.5,   # Positive but often used sarcastically
-            'perfect': 1.5,     # Positive but often used sarcastically
-            'sure': 0.0,        # Neutral for sarcasm detection
-            'yeah': 0.0,        # Neutral for sarcasm detection
-            'right': 0.0        # Neutral for sarcasm detection
+            'absolutely': 0.0,
+            'totally': 0.0,
+            'of course': 0.0,
+            'relaxing': 1.0,
+            'wonderful': 1.5,
+            'perfect': 1.5,
+            'sure': 0.0,
+            'yeah': 0.0,
+            'right': 0.0
         }
         self.vader.lexicon.update(custom_lexicon)
+        self.logger.info("Custom lexicon loaded successfully")
 
-    def load_transformer_model(self):
-        """Load the DistilBERT model for sentiment analysis"""
+    def load_transformer_model(self, model_name: str):
+        """Load the transformer model for sentiment analysis."""
         try:
-            model_name = "distilbert-base-uncased-finetuned-sst-2-english"
             self.transformer_tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.transformer_model = AutoModelForSequenceClassification.from_pretrained(model_name)
+            self.logger.info(f"Transformer model {model_name} loaded successfully")
         except Exception as e:
-            print(f"Error loading transformer model: {e}")
+            self.logger.error(f"Error loading transformer model: {e}")
 
     def load_sarcasm_detector(self):
-        """Initialize sarcasm detection model"""
+        """Initialize sarcasm detection model."""
         try:
-            # Using a model fine-tuned for sarcasm detection
             model_name = "mrm8488/t5-base-finetuned-sarcasm-twitter"
             self.sarcasm_detector = pipeline(
                 "text-classification",
                 model=model_name,
                 tokenizer=model_name
             )
+            self.logger.info("Sarcasm detector loaded successfully")
         except Exception as e:
-            print(f"Error loading sarcasm detector: {e}")
+            self.logger.error(f"Error loading sarcasm detector: {e}")
 
-    def check_sarcasm_patterns(self, text):
-        """Check for common sarcasm patterns using regex with weighted scores"""
+    def preprocess_text(self, text: str) -> str:
+        """Enhanced text preprocessing pipeline."""
+        # Convert to lowercase
+        text = text.lower()
+        
+        # Expand contractions
+        text = contractions.fix(text)
+        
+        # Handle emojis
+        text = emoji.demojize(text)
+        
+        # Normalize repeated characters
+        text = re.sub(r'(.)\1+', r'\1\1', text)
+        
+        # Correct spelling
+        text = str(TextBlob(text).correct())
+        
+        # Remove URLs
+        text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
+        
+        # Remove user mentions and hashtags
+        text = re.sub(r'@\w+|\#\w+', '', text)
+        
+        # Remove irrelevant punctuation
+        text = re.sub(r'[^\w\s]', ' ', text)
+        
+        # Remove extra whitespace
+        text = ' '.join(text.split())
+        
+        return text
+
+    def check_sarcasm_patterns(self, text: str) -> tuple:
+        """Check for common sarcasm patterns using regex with weighted scores."""
         text_lower = text.lower()
         pattern_matches = []
         total_score = 0.0
@@ -134,8 +194,8 @@ class SentimentAnalyzer:
         
         return len(pattern_matches) > 0, total_score / len(self.sarcasm_indicators['sarcasm_patterns'])
 
-    def rule_based_sarcasm_detection(self, text):
-        """Enhanced rule-based sarcasm detection using word patterns and context"""
+    def rule_based_sarcasm_detection(self, text: str) -> tuple:
+        """Enhanced rule-based sarcasm detection using word patterns and context."""
         text_lower = text.lower()
         
         # Check for positive words in negative context
@@ -165,8 +225,8 @@ class SentimentAnalyzer:
         
         return sarcasm_prob > self.sarcasm_thresholds['moderate'], sarcasm_prob
 
-    def detect_sarcasm(self, text):
-        """Enhanced sarcasm detection combining model and rule-based approaches"""
+    def detect_sarcasm(self, text: str) -> tuple:
+        """Enhanced sarcasm detection combining model and rule-based approaches."""
         # Get model-based sarcasm detection
         model_sarcasm = False
         model_score = 0.0
@@ -177,7 +237,7 @@ class SentimentAnalyzer:
                 model_sarcasm = result['label'] == 'LABEL_1'
                 model_score = result['score']
             except Exception as e:
-                print(f"Error in model-based sarcasm detection: {e}")
+                self.logger.error(f"Error in model-based sarcasm detection: {e}")
         
         # Get rule-based sarcasm detection
         rule_sarcasm, rule_score = self.rule_based_sarcasm_detection(text)
@@ -190,8 +250,8 @@ class SentimentAnalyzer:
         
         return final_score > self.sarcasm_thresholds['moderate'], final_score
 
-    def get_transformer_sentiment(self, text):
-        """Get sentiment score from transformer model"""
+    def get_transformer_sentiment(self, text: str) -> float:
+        """Get sentiment score from transformer model."""
         if self.transformer_model:
             inputs = self.transformer_tokenizer(
                 text,
@@ -205,19 +265,22 @@ class SentimentAnalyzer:
             return scores[1].item()  # Positive sentiment score
         return 0.5  # Neutral if model not available
 
-    def analyze_sentiment(self, text):
-        """Comprehensive sentiment analysis with enhanced sarcasm detection"""
+    def analyze_sentiment(self, text: str, preprocess: bool = True) -> Dict:
+        """Comprehensive sentiment analysis with enhanced sarcasm detection."""
+        # Preprocess text if requested
+        processed_text = self.preprocess_text(text) if preprocess else text
+        
         # Get VADER scores
-        vader_scores = self.vader.polarity_scores(text)
+        vader_scores = self.vader.polarity_scores(processed_text)
         
         # Get transformer scores
-        transformer_score = self.get_transformer_sentiment(text)
+        transformer_score = self.get_transformer_sentiment(processed_text)
         
         # Detect sarcasm
-        is_sarcastic, sarcasm_score = self.detect_sarcasm(text)
+        is_sarcastic, sarcasm_score = self.detect_sarcasm(processed_text)
         
         # Get TextBlob sentiment
-        textblob_sentiment = TextBlob(text).sentiment
+        textblob_sentiment = TextBlob(processed_text).sentiment
         
         # Combine scores with weights
         vader_weight = 0.4
@@ -260,8 +323,9 @@ class SentimentAnalyzer:
             else:
                 warning_message = "Possible sarcasm detected"
         
-        return {
+        results = {
             'text': text,
+            'processed_text': processed_text if preprocess else None,
             'sentiment': sentiment,
             'vader_scores': vader_scores,
             'transformer_score': transformer_score,
@@ -273,129 +337,117 @@ class SentimentAnalyzer:
             'sarcasm_score': sarcasm_score,
             'final_score': final_score,
             'adjusted_sentiment': sentiment if is_sarcastic else None,
-            'warning_message': warning_message
+            'warning_message': warning_message,
+            'timestamp': datetime.now().isoformat()
         }
+        
+        # Log the analysis
+        self.logger.info(f"Analyzed text: {text[:50]}...")
+        self.logger.info(f"Sentiment: {sentiment}, Sarcasm: {is_sarcastic}")
+        
+        return results
 
-class EnhancedSentimentAnalyzer:
-    def __init__(self):
-        # Initialize sarcasm detection threshold
-        self.sarcasm_threshold = 0.6  # Lowered from 0.7 to catch more sarcastic cases
-        
-        # Enhanced sarcasm indicators
-        self.positive_words = {
-            'love', 'great', 'wonderful', 'amazing', 'fantastic', 'perfect',
-            'excellent', 'brilliant', 'beautiful', 'happy', 'delighted', 'thrilled',
-            'excited', 'fabulous', 'marvelous', 'splendid', 'terrific', 'outstanding'
-        }
-        
-        self.negative_contexts = {
-            'waiting', 'traffic', 'monday', 'waking up', 'early', 'meeting',
-            'work', 'overtime', 'weekend', 'flat tire', 'slow', 'terrible',
-            'surprise', 'problem', 'issue', 'delay', 'late', 'broken'
-        }
-        
-        self.sarcasm_phrases = {
-            'oh great', 'just what i needed', 'yeah right', 'sure thing',
-            'of course', 'absolutely', 'definitely', 'totally', 'completely',
-            'wonderful surprise', 'lovely', 'perfect timing', 'exactly what i wanted',
-            'couldn\'t be better', 'just perfect', 'how nice', 'what a joy',
-            'i\'m so happy', 'i love', 'i absolutely love', 'i really love',
-            'i\'m thrilled', 'i\'m delighted', 'i\'m excited', 'i\'m overjoyed'
-        }
-        
-        self.sarcasm_patterns = [
-            r'(?i)(i|we|they|he|she|it)\s+(absolutely|totally|completely|really|truly)\s+(love|adore|enjoy|like)',
-            r'(?i)(oh|ah|well)\s+(great|wonderful|perfect|lovely|fantastic)',
-            r'(?i)(just|exactly)\s+(what|the)\s+(i|we|they|he|she|it)\s+(needed|wanted)',
-            r'(?i)(couldn\'t|can\'t)\s+(be|get)\s+(any|more)\s+(better|worse)',
-            r'(?i)(what|how)\s+(a|an)\s+(wonderful|lovely|perfect|great)\s+(surprise|day|time)',
-            r'(?i)(i\'m|we\'re|they\'re|he\'s|she\'s|it\'s)\s+(so|really|absolutely|totally)\s+(happy|thrilled|delighted|excited)',
-            r'(?i)(sure|yeah|right|of course|absolutely|definitely|totally)\s+(thing|why not|that\'s great)',
-            r'(?i)(just|exactly)\s+(perfect|what i needed|what i wanted)',
-            r'(?i)(i|we|they|he|she|it)\s+(just|really)\s+(love|adore|enjoy)\s+(to|when)',
-            r'(?i)(isn\'t|aren\'t|wasn\'t|weren\'t)\s+(that|this)\s+(just|so|really)\s+(great|wonderful|perfect)'
-        ]
-        
-        # Load models and initialize other components
-        self._load_models()
-        self._load_custom_lexicon()
+    def analyze_batch(self, texts: List[str], preprocess: bool = True) -> List[Dict]:
+        """Analyze a batch of texts."""
+        results = []
+        for text in texts:
+            result = self.analyze_sentiment(text, preprocess)
+            results.append(result)
+        return results
 
-    def check_sarcasm_patterns(self, text):
-        """Check for sarcasm patterns using regex with weighted scores."""
-        pattern_scores = []
-        for pattern in self.sarcasm_patterns:
-            matches = re.finditer(pattern, text.lower())
-            for match in matches:
-                # Calculate pattern score based on match length and position
-                match_text = match.group(0)
-                score = 0.7  # Base score for pattern match
-                
-                # Boost score if pattern contains strong sarcasm indicators
-                if any(phrase in match_text for phrase in self.sarcasm_phrases):
-                    score += 0.2
-                
-                # Boost score if pattern contains positive words in negative context
-                if any(word in match_text for word in self.positive_words) and \
-                   any(context in text.lower() for context in self.negative_contexts):
-                    score += 0.1
-                
-                pattern_scores.append(score)
-        
-        return max(pattern_scores) if pattern_scores else 0.0
+    def evaluate_model(self, dataset_name: str = "sst2") -> Dict:
+        """Evaluate model performance on benchmark datasets."""
+        try:
+            # Load dataset
+            dataset = load_dataset(dataset_name)
+            
+            # Prepare data
+            texts = dataset['train']['sentence']
+            labels = dataset['train']['label']
+            
+            # Analyze texts
+            predictions = []
+            for text in texts:
+                result = self.analyze_sentiment(text)
+                pred = 1 if result['sentiment'] == 'Positive' else 0
+                predictions.append(pred)
+            
+            # Calculate metrics
+            report = classification_report(labels, predictions, output_dict=True)
+            conf_matrix = confusion_matrix(labels, predictions)
+            
+            # Plot confusion matrix
+            plt.figure(figsize=(8, 6))
+            sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues')
+            plt.title('Confusion Matrix')
+            plt.ylabel('True Label')
+            plt.xlabel('Predicted Label')
+            plt.savefig(self.output_dir / 'confusion_matrix.png')
+            plt.close()
+            
+            # Save evaluation results
+            evaluation_results = {
+                'dataset': dataset_name,
+                'metrics': report,
+                'confusion_matrix': conf_matrix.tolist(),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            with open(self.output_dir / 'evaluation_results.json', 'w') as f:
+                json.dump(evaluation_results, f, indent=4)
+            
+            return evaluation_results
+            
+        except Exception as e:
+            self.logger.error(f"Error in model evaluation: {e}")
+            return None
 
-    def rule_based_sarcasm_detection(self, text):
-        """Enhanced rule-based sarcasm detection with weighted scoring."""
-        text_lower = text.lower()
-        score = 0.0
-        weights = {
-            'positive_negative': 0.4,  # Weight for positive words in negative context
-            'sarcasm_phrases': 0.3,    # Weight for known sarcasm phrases
-            'patterns': 0.3            # Weight for pattern matching
-        }
+    def export_results(self, results: Union[Dict, List[Dict]], format: str = 'csv') -> str:
+        """Export analysis results to file."""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        # Check for positive words in negative contexts
-        positive_in_negative = False
-        for word in self.positive_words:
-            if word in text_lower:
-                for context in self.negative_contexts:
-                    if context in text_lower:
-                        positive_in_negative = True
-                        break
-                if positive_in_negative:
-                    break
+        if format.lower() == 'csv':
+            if isinstance(results, dict):
+                results = [results]
+            df = pd.DataFrame(results)
+            output_file = self.output_dir / f'sentiment_analysis_{timestamp}.csv'
+            df.to_csv(output_file, index=False)
+        elif format.lower() == 'json':
+            output_file = self.output_dir / f'sentiment_analysis_{timestamp}.json'
+            with open(output_file, 'w') as f:
+                json.dump(results, f, indent=4)
+        else:
+            raise ValueError("Unsupported format. Use 'csv' or 'json'.")
         
-        if positive_in_negative:
-            score += weights['positive_negative']
-        
-        # Check for known sarcasm phrases
-        for phrase in self.sarcasm_phrases:
-            if phrase in text_lower:
-                score += weights['sarcasm_phrases']
-                break
-        
-        # Check for sarcasm patterns
-        pattern_score = self.check_sarcasm_patterns(text)
-        score += pattern_score * weights['patterns']
-        
-        return min(score, 1.0)  # Cap the score at 1.0
+        self.logger.info(f"Results exported to {output_file}")
+        return str(output_file)
 
-    def detect_sarcasm(self, text):
-        """Enhanced sarcasm detection combining model and rule-based approaches."""
-        # Get model-based sarcasm score
-        model_score = self._get_model_sarcasm_score(text)
-        
-        # Get rule-based sarcasm score
-        rule_score = self.rule_based_sarcasm_detection(text)
-        
-        # Combine scores with adjusted weights
-        combined_score = (model_score * 0.4) + (rule_score * 0.6)
-        
-        # Determine if text is sarcastic based on combined score
-        is_sarcastic = combined_score >= self.sarcasm_threshold
-        
-        return {
-            'is_sarcastic': is_sarcastic,
-            'sarcasm_score': combined_score,
-            'model_score': model_score,
-            'rule_score': rule_score
-        } 
+def main():
+    """Main function to demonstrate usage."""
+    # Initialize analyzer
+    analyzer = EnhancedSentimentAnalyzer()
+    
+    # Example texts
+    texts = [
+        "I absolutely love waiting in traffic for two hours.",
+        "Oh great, another Monday. Just what I needed.",
+        "Yeah, because waking up at 5 AM is so relaxing.",
+        "The meeting is scheduled for 2 PM.",
+        "The weather is cloudy today."
+    ]
+    
+    # Analyze texts
+    results = analyzer.analyze_batch(texts)
+    
+    # Export results
+    analyzer.export_results(results, format='csv')
+    analyzer.export_results(results, format='json')
+    
+    # Evaluate model
+    evaluation_results = analyzer.evaluate_model()
+    if evaluation_results:
+        print("\nEvaluation Results:")
+        print(json.dumps(evaluation_results['metrics'], indent=2))
+
+if __name__ == "__main__":
+    main() 
