@@ -1,0 +1,22 @@
+{
+    "text": "I absolutely love waiting in traffic for two hours.",
+    "processed_text": null,
+    "sentiment": "Positive",
+    "vader_scores": {
+        "neg": 0.0,
+        "neu": 0.625,
+        "pos": 0.375,
+        "compound": 0.6369
+    },
+    "transformer_score": 0.9815686345100403,
+    "textblob_scores": {
+        "polarity": 0.5,
+        "subjectivity": 0.6
+    },
+    "is_sarcastic": false,
+    "sarcasm_score": 0.5462100300788879,
+    "final_score": 0.7400149076080323,
+    "adjusted_sentiment": null,
+    "warning_message": null,
+    "timestamp": "2025-05-19T17:07:29.943908"
+}
