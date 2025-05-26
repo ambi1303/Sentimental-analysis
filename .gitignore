@@ -34,29 +34,61 @@ ENV/
 # Logs
 *.log
 logs/
+api.log
+sentiment_analysis.log
+burnout_analysis.log
 
-# Data and Models
-data/
+# Model files and caches
+*.pt
+*.pth
+*.bin
+*.h5
+*.ckpt
+.cache/
 models/
-checkpoints/
 output/
 
-# Large files
-allfiles.txt
+# Dataset files
+*.csv
+*.json
+*.xlsx
+*.xls
+datasets/
+data/
 
-# Node
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Project specific
+allfiles.txt
+backend/2.19.0
+backend/__pycache__/
+backend/api/__pycache__/
+backend/core/__pycache__/
+backend/api/output/
+backend/core/output/
+backend/models/
+backend/datasets/
+
+# Remove frontend related
+frontend/
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Build
-frontend/build/
-frontend/dist/
-
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local 
+# Remove unnecessary files
+app.py
+models.py
+sentiment_analysis.py
+preprocessing.py
+enhanced_sentiment_analyzer.py
+cli.py
+organize_project.py
+start.bat
+start.sh
+Dockerfile
+docker-compose.yml 
